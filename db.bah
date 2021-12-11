@@ -1,0 +1,79 @@
+#include "sqlite3.bah"
+#include "json.bah"
+
+BPM_DIR cpstring
+
+DB db
+
+genBPMdir() {
+    #linux {
+        BPM_DIR = getenv("HOME") + "/.bpm"
+    }
+    #windows {
+        BPM_DIR = getenv("HOMEPATH") + "/.bpm"
+    }
+    #darwin {
+        BPM_DIR = getenv("HOME") + "/.bpm"
+    }
+    mkdir(BPM_DIR, 0700)
+}
+
+dbGuard() {
+    genBPMdir()
+    if fileExists(BPM_DIR + "/db.db") == 0 {
+        DB = db{}
+        if DB.open(BPM_DIR + "/db.db") == false {
+            panic("Errror creating BPM database.")
+        }
+
+        DB.exec("CREATE TABLE packages(
+            name TEXT PRIMARY KEY NOT NULL,
+            url TEXT NOT NULL,
+            ver FLOAT NOT NULL
+        )")
+
+        DB.exec("CREATE TABLE deps(
+            pkg TEXT PRIMARY KEY NOT NULL,
+            parent TEXT NOT NULL
+        )")
+
+
+        DB.close()
+        fs = fileStream{}
+        fs.open(BPM_DIR + "/sources.json", "w")
+        fs.writeFile("
+        [
+            \"https://github.com\"
+        ]")
+        fs.close()
+    }
+}
+
+readSources() []cpstring {
+    fs = fileStream{}
+    fs.open(BPM_DIR + "/sources.json", "r")
+    print("Reading sources... ")
+    sources = []cpstring
+    root = parseJson(fs.readContent())
+    root.scan(sources)
+
+    if len(sources) == 0 {
+        panic("no sources found!\nAdd a source in '"+BPM_DIR+"/sources.json'")
+    }
+
+    println("ok")
+    fs.close()
+    return sources
+}
+
+struct package {
+    name: cpstring
+    url: cpstring
+    ver: float
+    deps: []cpstring
+}
+
+struct dep {
+    pkg: cpstring
+    parent: cpstring
+}

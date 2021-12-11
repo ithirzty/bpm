@@ -1,0 +1,93 @@
+#include "iostream.bah"
+#include "flags.bah"
+#include "exec.bah"
+
+#include "db.bah"
+#include "package.bah"
+
+flags flags
+
+main(args []cpstring) int {
+    flags = flags{}
+    flags.addBool("wrap", "To wrap a package.")
+    flags.addBool("list", "To list all packages.")
+    flags.addString("install", "To install a package.")
+    flags.addString("remove", "To remove a package.")
+    flags.addString("deps", "To list all dependecies of a package.")
+    flags.parse(args)
+    
+    dbGuard()
+
+    //Wrapping a package.
+    if flags.isSet("wrap") == 1 {
+        wrapPackage()
+    } else if flags.isSet("install") == 1 {
+        arg = flags.get("install")
+        if arg == "itself" {
+            
+            parts = splitString(string(args[0]), " ")
+            name = parts[0]
+
+            #linux {
+                cmd = command("cp "+name.str()+" /bin/bpm & chmod +x /bin/bpm")
+                cmd.run()
+                if cmd.status != 0 {
+                    panic("Please run as sudo.")
+                }
+            }
+            #darwin {
+                cmd = command("cp "+name.str()+" "+BPM_DIR+"/bpm & chmod +x "+BPM_DIR+"/bpm")
+                cmd.run()
+                cmd = command("export PATH=\""+BPM_DIR+":$PATH\"")
+                cmd.run()
+                if cmd.status != 0 {
+                    panic("Please run as sudo.")
+                }
+            }
+            #windows {
+                cmd = command("xcopy /S /Q /Y /F "+name.str()+" "+BPM_DIR+"/bpm.exe")
+                cmd.run()
+                cmd = command("xcopy /S /Q /Y /F "+name.str()+" C:/WINDOWS/bpm.exe")
+                cmd.run()
+            }
+        } else {
+            installPackage(arg)
+        }
+    } else if flags.isSet("remove") == 1 {
+        removePackage(flags.get("remove"))
+    } else if flags.isSet("list") == 1 {
+        DB = db{}
+        DB.open(BPM_DIR+"/db.db")
+        resp = DB.exec("SELECT * FROM packages")
+        packages = []package*
+        resp.scan(packages)
+        i=0; for i < len(packages) {
+            p = packages[i]
+            println("-> "+p.name+" ("+p.url+")")
+            i = i + 1
+        }
+        DB.close()
+    } else if flags.isSet("deps") == 1 {
+        name = flags.get("deps")
+        if isInstalled(name) == false {
+            panic("No package called '"+name+"' is installed.")
+        }
+        DB = db{}
+        DB.open(BPM_DIR+"/db.db")
+        resp = DB.exec("SELECT parent FROM deps WHERE pkg = '"+name+"'")
+        deps = []cpstring
+        resp.scan(deps)
+        i=0; for i < len(deps) {
+            p = new package
+            resp = DB.exec("SELECT * FROM packages WHERE name = '"+deps[i]+"'")
+            resp.scan(p)
+            println("-> "+p.name+" ("+p.url+")")
+            i = i + 1
+        }
+        DB.close()
+    }
+
+    println("Done!")
+
+    return 0
+}

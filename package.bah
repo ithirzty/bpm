@@ -1,0 +1,291 @@
+#include "exec.bah"
+#include "path.bah"
+#include "json.bah"
+
+#linux {
+    const BAH_DIR = "/opt/bah"
+}
+#darwin {
+    const BAH_DIR = "/opt/bah"
+}
+#darwin {
+    const BAH_DIR = "C:/Bah"
+}
+
+getNameFromURL(u cpstring) cpstring {
+    p = strAsArr(u)
+    nbSlash = 0
+    i=len(p)-1; for i >= 0 {
+        if p[i] == '/' {
+            nbSlash = nbSlash + 1
+        }
+        if nbSlash == 2 {
+            break
+        }
+        i = i - 1
+    }
+    np = string(u)
+    np.trimLeft(i+1)
+    return np.str()
+}
+
+getAuthorFromName(n cpstring) cpstring {
+    p = strAsArr(n)
+    i=len(p)-1; for i >= 0 {
+        if p[i] == '/' {
+            break
+        }
+        i = i - 1
+    }
+    np = string(n)
+    np.trimRight(len(p) - i)
+
+    return np.str()
+}
+
+getVer() float {
+    cmd = command("bah -v")
+    ver = string(cmd.run())
+    ver.trimLeft(23)
+    ver.trimRight(24)
+
+    parts = splitString(ver, " (build ")
+
+    ver = parts[0]
+    build = parts[1]
+
+    return strToFloat(ver.str() + build.str())
+
+}
+
+getGitURL() cpstring {
+    cmd = command("git config --get remote.origin.url")
+    r cpstring = null
+    r = cmd.run()
+    if cmd.status != 0 || <ptr>r == null {
+        panic("Cannot wrap package that is not in a git repository.\nMake sure that you add the remote origin before wrapping the package.")
+    }
+    strTrimRight(&r, 1)
+    return r
+}
+
+wrapPackage() {
+    //initiating a new package
+    p = new package
+    p.url = getGitURL()
+    p.name = getNameFromURL(p.url)
+    p.ver = getVer()
+
+    //writting the wrapped package
+    fs = fileStream{}
+    fs.open("./bpm.mod", "w")
+    fs.writeFile(toJson(p))
+    fs.close()
+}
+
+findUrl(sources []cpstring, name cpstring) cpstring {
+
+    i=0; for i < len(sources) {
+        url = sources[i]+"/"+name
+        cmd = command("git ls-remote "+url)
+        cmd.run()
+        if cmd.status == 0 {
+            return url
+        }
+        i = i + 1
+    }
+
+    panic("Cannot find package '"+name+"'.\nPlease check '"+BPM_DIR+"/sources.json'.")
+    return ""
+
+}
+
+isInstalled(name cpstring) bool {
+    installed = false
+    DB = db{}
+    DB.open(BPM_DIR + "/db.db")
+
+    resp = DB.exec("SELECT * FROM packages WHERE name = '"+name+"'")
+    p = new package
+    resp.scan(p)
+    if p != null && <ptr>p.name != null {
+        installed = true
+    }
+    DB.close()
+    return installed
+}
+
+#define installPackage(name cpstring)
+
+installPackageFromURL(url cpstring) {
+    sources = readSources()
+    name = getNameFromURL(url)
+    src = string(url)
+    src.trimRight(strlen(name)+1)
+    found = false
+    i=0; for i < len(sources) {
+        if sources[i] == src.str() {
+            found = false
+            break
+        }
+        i = i + 1
+    }
+
+    if found == false {
+        println("Package '"+name+"' comes from the source '"+src.str()+"'. Should you add it? [Y/n] ")
+        resp = stdinput(1)
+        if resp == "Y" {
+            print("Adding '"+src.str()+"'...")
+            sources[len(sources)] = src.str()
+            fs = fileStream{}
+            fs.open(BPM_DIR + "/sources.json", "w")
+            fs.writeFile(toJson(sources))
+            fs.close()
+            println("ok")
+        } else {
+            return
+        }
+    }
+    installPackage(name)
+}
+registerPackage(p package*) {
+    print("Updating database... ")
+
+    DB = db{}
+    DB.open(BPM_DIR + "/db.db")
+
+    resp = DB.exec("INSERT INTO packages VALUES('"+p.name+"', '"+p.url+"', "+floatToStr(p.ver)+")")
+    resp.panic()
+    
+    println("ok")
+
+    println("Checking dependecies...")
+    i=0; for i < len(p.deps) {
+        if p.deps[i] == "" {
+            i = i + 1
+            continue
+        }
+        installPackageFromURL(p.deps[i])
+        resp = DB.exec("INSERT INTO deps VALUES('"+p.name+"', '"+getNameFromURL(p.deps[i])+"')")
+        resp.panic()
+        i = i + 1
+    }
+
+    DB.close()
+
+}
+
+removePackageFiles(name cpstring) {
+    setCurrentPath(BAH_DIR)
+    dir = getAuthorFromName(name)
+    cmd = command("yes | rm -r "+name)
+    cmd.run()
+    cmd = command("yes | rm -r "+dir)
+    cmd.run()
+}
+
+installPackage(name cpstring) {
+    sources = readSources()
+
+    url = findUrl(sources, name)
+
+    dir = getAuthorFromName(name)
+    setCurrentPath(BAH_DIR)
+
+    installed = isInstalled(name)
+
+    if installed == false {
+        println("Installing '"+name+"'.")
+        mkdir(dir, 0700)
+        setCurrentPath(dir)
+
+        print("Clonning repository... ")
+
+        cmd = command("git clone "+url+"")
+        cmd.run()
+
+        setCurrentPath("../"+name)
+
+        files = listFiles(".")
+
+        println("ok")
+
+        found = false
+        i=0; for i < len(files) {
+            f = files[i]
+            if f == "bpm.mod" {
+                found = true
+                break
+            }
+            i = i + 1
+        }
+        if found == false {
+            removePackageFiles(name)
+            panic("No BPM package found. Aborting.")
+        }
+
+        p = new package
+        fs = fileStream{}
+        fs.open("./bpm.mod", "r")
+        root = parseJson(fs.readContent())
+        fs.close()
+        root.scan(p)
+        if p.url != url {
+            println("WARNING: URL missmatch, this package could be stolen or compromised.")
+        }
+
+        registerPackage(p)
+    } else {
+        println("Updating '"+name+"'.")
+        setCurrentPath(name)
+        cmd = command("git pull origin main")
+        cmd.run()
+        //update package
+    }
+
+}
+
+#define removePackage(name cpstring)
+
+removeDpendency(name cpstring) {
+    DB = db{}
+    DB.open(BPM_DIR+"/db.db")
+
+    resp = DB.exec("SELECT COUNT(*) FROM deps WHERE pkg = '"+name+"'")
+    nb = 0
+    resp.scan(nb)
+
+    if nb == 0 {
+        removePackage(name)
+    }
+
+    DB.close()
+}
+
+
+removePackage(name cpstring) {
+    if isInstalled(name) == false {
+        panic("No package called '"+name+"' is installed.")
+    }
+
+
+    DB = db{}
+    DB.open(BPM_DIR+"/db.db")
+
+    print("Removing package '"+name+"'... ")
+    DB.exec("DELETE FROM packages WHERE name = '"+name+"'")
+    removePackageFiles(name)
+    println("ok")
+
+    println("Removing dependencies.")
+    resp = DB.exec("SELECT parent FROM deps WHERE pkg = '"+name+"'")
+    deps = []cpstring
+    resp.scan(deps)
+    i=0; for i < len(deps) {
+        removeDpendency(deps[i])
+        i = i + 1
+    }
+
+    DB.close()
+
+}
