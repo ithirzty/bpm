@@ -3,6 +3,9 @@ BahPackageManager enables you to install and remove package without worrying abo
 > This is still pulsing in beta!
 
 ## Installation
+
+Make sure you have lib sqlite3 installed.
+
 1. Compile BPM `bah ./main.bah -d`
 2. Install it! `./main -install itself`
 
