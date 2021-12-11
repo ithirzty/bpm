@@ -177,10 +177,7 @@ registerPackage(p package*) {
 
 removePackageFiles(name cpstring) {
     setCurrentPath(BAH_DIR)
-    dir = getAuthorFromName(name)
     cmd = command("yes | rm -r "+name)
-    cmd.run()
-    cmd = command("yes | rm -r "+dir)
     cmd.run()
 }
 

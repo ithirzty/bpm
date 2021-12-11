@@ -5,6 +5,8 @@
 #include "db.bah"
 #include "package.bah"
 
+#cLib "g"
+
 flags flags
 
 main(args []cpstring) int {
@@ -63,7 +65,7 @@ main(args []cpstring) int {
         resp.scan(packages)
         i=0; for i < len(packages) {
             p = packages[i]
-            println("-> "+p.name+" ("+p.url+")")
+            println("-> "+p.url+"")
             i = i + 1
         }
         DB.close()
