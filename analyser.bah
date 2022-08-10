@@ -28,24 +28,28 @@ struct analyser {
     entryPoint: cpstring
     filesDone: []cpstring
 
+    checkPackageImport(fileName cpstring) {
+        if string(fileName).count("/") == 0 {
+            return
+        }
+        path = dirFromFile(fileName)
+        if isInstalled(path) {
+            if path in this.p.deps == false {
+                this.p.deps[len(this.p.deps)] = path
+            }
+        }
+    }
+
     parseLine(l []Tok) {
         if l[0].cont == "#include" {
             fileName = l[1].cont[1:strlen(l[1].cont)-1]
             if fileExists(this.path + "/" + fileName) {
                 analyserParseFile(this, this.path + "/" + fileName)
             }
+            this.checkPackageImport(fileName)
         } else if l[0].cont == "#import" {
             fileName = l[1].cont[1:strlen(l[1].cont)-1]
-            if string(fileName).count("/") == 0 {
-                return
-            }
-            path = dirFromFile(fileName)
-            if isInstalled(path) {
-                if path in this.p.deps == false {
-                    this.p.deps[len(this.p.deps)] = path
-                }
-            }
-
+            this.checkPackageImport(fileName)
         }
     }
 
