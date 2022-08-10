@@ -1,0 +1,160 @@
+doneFiles = []cpstring
+
+#define analyserParseFile(tp ptr, name cpstring)
+#define isInstalled(name cpstring) bool
+
+dirFromFile(f cpstring) cpstring {
+    i=strlen(f)-1; for i >= 0, i-- {
+        if f[i] == '/' {
+            break
+        }
+    }
+    j=0; for j < i, j++ {
+        if f[j] != '/' {
+            break
+        }
+    }
+    if j > 0 {
+        f = f[j:i] 
+    } else {
+        f = f[:i]
+    }
+    return f
+}
+
+struct analyser {
+    p: package*
+    path: cpstring
+    entryPoint: cpstring
+    filesDone: []cpstring
+
+    parseLine(l []Tok) {
+        if l[0].cont == "#include" {
+            fileName = l[1].cont[1:strlen(l[1].cont)-1]
+            if fileExists(this.path + "/" + fileName) {
+                analyserParseFile(this, this.path + "/" + fileName)
+            }
+        } else if l[0].cont == "#import" {
+            fileName = l[1].cont[1:strlen(l[1].cont)-1]
+            if string(fileName).count("/") == 0 {
+                return
+            }
+            path = dirFromFile(fileName)
+            if isInstalled(path) {
+                if path in this.p.deps == false {
+                    this.p.deps[len(this.p.deps)] = path
+                }
+            }
+
+        }
+    }
+
+    parseLines(tokens []Tok) {
+
+        if len(tokens) == 0 {
+            return
+        }
+        line = []Tok
+        ft = tokens[0]
+        currentLine = ft.line
+        nbEncl = 0
+        i=0; for i < len(tokens) {
+            t = tokens[i]
+            
+            if t.type == TOKEN_TYPE_ENCL {
+                if t.cont == "(" {
+                    nbEncl =nbEncl + 1
+                } else if t.cont == ")" {
+                    nbEncl =nbEncl - 1
+                } else if t.cont == "{" {
+                    nbEncl =nbEncl + 1
+                } else if t.cont == "}" {
+                    nbEncl =nbEncl - 1
+                } else if t.cont == "[" {
+                    nbEncl =nbEncl + 1
+                } else if t.cont == "]" {
+                    nbEncl =nbEncl - 1
+                }
+            }
+
+            if t.type == TOKEN_TYPE_STR && t.begLine == currentLine {
+                currentLine = t.line
+            }
+
+            if nbEncl == 0 {
+                if t.line != currentLine {
+                    if t.type == TOKEN_TYPE_ENCL {
+                        line[len(line)] = t
+                        pt = tokens[i-1]
+                        currentLine = pt.line
+                    } else {
+                        currentLine = t.line
+                    }
+                    this.parseLine(line)
+                    clear(line)
+                    if t.type == TOKEN_TYPE_ENCL {
+                        i++
+                        continue
+                    }
+                } else if t.cont == ";" {
+                    currentLine = t.line
+                    this.parseLine(line)
+                    clear(line)
+                    i++
+                    continue
+                }
+            }
+
+            line[len(line)] = t
+            i++
+        }
+
+        if len(line) > 0 {
+            if nbEncl == 0 {
+                    this.parseLine(line)
+                    clear(line)
+            } else {
+                ft = line[len(line)-1]
+            }
+        }
+
+    }
+
+    fromPackage(p package*, path cpstring) {
+        this.p = p
+        this.path = path
+        files = listFiles(path)
+        pathS = string(path)
+        if "main.bah" in files {
+            this.entryPoint = "main.bah"
+        } else {
+            i=0; for i < len(files), i++ {
+                if string(files[i]).hasSuffix(".bah") == false {
+                    continue
+                }
+                if pathS.hasSuffix(files[i][:strlen(files[i])-4]) {
+                    this.entryPoint = files[i]
+                    break
+                }
+            }
+        }
+        analyserParseFile(this, path+"/"+this.entryPoint)
+    }
+
+}
+
+analyserParseFile(tp ptr, name cpstring) {
+    this analyser* = tp
+    if name in this.filesDone {
+        return
+    }
+
+    this.filesDone[len(this.filesDone)] = name
+
+
+    fs = fileStream{}
+    fs.open(name, "r")
+    toks = lexer(fs.readContent(), fs.getSize())
+    fs.close()
+    this.parseLines(toks)
+}

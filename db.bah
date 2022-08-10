@@ -1,7 +1,4 @@
-#include "sqlite3.bah"
-#include "json.bah"
-
-BPM_DIR cpstring
+BPM_DIR = ""
 
 DB db
 
@@ -50,9 +47,12 @@ dbGuard() {
 }
 
 readSources() []cpstring {
+    print("Reading sources... ")
     fs = fileStream{}
     fs.open(BPM_DIR + "/sources.json", "r")
-    print("Reading sources... ")
+    if fs.isValid() == 0 {
+        panic("Cannot read sources file, please make shure it exists and have the right permissions.")
+    }
     sources = []cpstring
     root = parseJson(fs.readContent())
     root.scan(sources)

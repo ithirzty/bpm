@@ -1,22 +1,39 @@
-#include "iostream.bah"
-#include "flags.bah"
-#include "exec.bah"
+#import "iostream.bah"
+#import "flags.bah"
+#import "exec.bah"
+#import "time.bah"
+#import "sqlite3.bah"
+#import "json.bah"
+#import "path.bah"
+
+#linux {
+    const BAH_DIR = "/opt/bah"
+}
+#darwin {
+    const BAH_DIR = "/opt/bah"
+}
+#darwin {
+    const BAH_DIR = "C:/Bah"
+}
 
 #include "db.bah"
+#include "lexer.bah"
+#include "analyser.bah"
 #include "package.bah"
-
-#cLib "g"
 
 flags flags
 
 main(args []cpstring) int {
+    DEBUG_RCP = true
     flags = flags{}
     flags.addBool("wrap", "To wrap a package.")
     flags.addBool("list", "To list all packages.")
     flags.addString("install", "To install a package.")
+    flags.addString("update", "To update a package and its dependencies.")
     flags.addString("remove", "To remove a package.")
     flags.addString("deps", "To list all dependecies of a package.")
     flags.parse(args)
+
     
     dbGuard()
 
@@ -32,25 +49,25 @@ main(args []cpstring) int {
 
             #linux {
                 cmd = command("cp "+name.str()+" /bin/bpm & chmod +x /bin/bpm")
-                cmd.run()
+                cmd.runBytes()
                 if cmd.status != 0 {
                     panic("Please run as sudo.")
                 }
             }
             #darwin {
                 cmd = command("cp "+name.str()+" "+BPM_DIR+"/bpm & chmod +x "+BPM_DIR+"/bpm")
-                cmd.run()
+                cmd.runBytes()
                 cmd = command("export PATH=\""+BPM_DIR+":$PATH\"")
-                cmd.run()
+                cmd.runBytes()
                 if cmd.status != 0 {
                     panic("Please run as sudo.")
                 }
             }
             #windows {
                 cmd = command("xcopy /S /Q /Y /F "+name.str()+" "+BPM_DIR+"/bpm.exe")
-                cmd.run()
+                cmd.runBytes()
                 cmd = command("xcopy /S /Q /Y /F "+name.str()+" C:/WINDOWS/bpm.exe")
-                cmd.run()
+                cmd.runBytes()
             }
         } else {
             installPackage(arg)
@@ -65,7 +82,7 @@ main(args []cpstring) int {
         resp.scan(packages)
         i=0; for i < len(packages) {
             p = packages[i]
-            println("-> "+p.url+"")
+            println("-> "+p.name+" \t"+p.url)
             i = i + 1
         }
         DB.close()
