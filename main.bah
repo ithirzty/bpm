@@ -50,7 +50,7 @@ main(args []cpstring) int {
             #linux {
                 cmd = command("cp "+name.str()+" /bin/bpm & chmod +x /bin/bpm")
                 cmd.runBytes()
-                if cmd.status != 0 {
+                if fileExists("/bin/bpm") == false {
                     panic("Please run as sudo.")
                 }
             }

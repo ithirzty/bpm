@@ -308,7 +308,7 @@ lexer(s cpstring, codeLength uint) []Tok {
             i--
             currentType = TOKEN_TYPE_VAR
             
-            memstr = arrAsStr(memory)
+            memstr = arrToStr(memory)
             
             //token is a keyword
             if memstr in keywords {

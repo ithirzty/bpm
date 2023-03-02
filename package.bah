@@ -1,5 +1,4 @@
-getNameFromURL(u cpstring) cpstring {
-    p = strAsArr(u)
+getNameFromURL(p cpstring) cpstring {
     nbSlash = 0
     i=len(p)-1; for i >= 0 {
         if p[i] == '/' {
@@ -10,7 +9,7 @@ getNameFromURL(u cpstring) cpstring {
         }
         i = i - 1
     }
-    np = string(u)
+    np = string(p)
     np.trimLeft(i+1)
     if np.hasSuffix(".git") {
         np.trimRight(4)
@@ -19,15 +18,14 @@ getNameFromURL(u cpstring) cpstring {
     return np.str()
 }
 
-getAuthorFromName(n cpstring) cpstring {
-    p = strAsArr(n)
+getAuthorFromName(p cpstring) cpstring {
     i=len(p)-1; for i >= 0 {
         if p[i] == '/' {
             break
         }
         i = i - 1
     }
-    np = string(n)
+    np = string(p)
     np.trimRight(len(p) - i)
 
     return np.str()
@@ -35,7 +33,7 @@ getAuthorFromName(n cpstring) cpstring {
 
 getVer() float {
     cmd = command("bah -v")
-    ver = string(arrAsStr(cmd.runBytes()))
+    ver = string(arrToStr(cmd.runBytes()))
     ver.trimLeft(23)
     ver.trimRight(24)
 
@@ -54,7 +52,7 @@ getGitURL() cpstring {
     if cmd.status != 0 || len(r) == 0 {
         panic("Cannot wrap package that is not in a git repository.\nMake sure that you add the remote origin before wrapping the package.")
     }
-    s = string(arrAsStr(r))
+    s = string(arrToStr(r))
     s.trimRight(1)
     if s.hasSuffix(".git") {
         s.trimRight(4)
