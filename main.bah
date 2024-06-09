@@ -23,7 +23,7 @@
 
 flags flags
 
-main(args []cpstring) int {
+main(args []str) int {
     DEBUG_RCP = true
     flags = flags{}
     flags.addBool("wrap", "To wrap a package.")
@@ -83,7 +83,7 @@ main(args []cpstring) int {
         i=0; for i < len(packages) {
             p = packages[i]
             println("-> "+p.name+" \t"+p.url)
-            i = i + 1
+            i++
         }
         DB.close()
     } else if flags.isSet("deps") == 1 {
@@ -94,14 +94,14 @@ main(args []cpstring) int {
         DB = db{}
         DB.open(BPM_DIR+"/db.db")
         resp = DB.exec("SELECT parent FROM deps WHERE pkg = '"+name+"'")
-        deps = []cpstring
+        deps = []str
         resp.scan(deps)
         i=0; for i < len(deps) {
             p = new package
             resp = DB.exec("SELECT * FROM packages WHERE name = '"+deps[i]+"'")
             resp.scan(p)
             println("-> "+p.name+" ("+p.url+")")
-            i = i + 1
+            i++
         }
         DB.close()
     }

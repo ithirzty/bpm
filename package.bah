@@ -1,13 +1,13 @@
-getNameFromURL(p cpstring) cpstring {
+getNameFromURL(p str) str {
     nbSlash = 0
     i=len(p)-1; for i >= 0 {
         if p[i] == '/' {
-            nbSlash = nbSlash + 1
+            nbSlash++
         }
         if nbSlash == 2 {
             break
         }
-        i = i - 1
+        i--
     }
     np = string(p)
     np.trimLeft(i+1)
@@ -18,12 +18,12 @@ getNameFromURL(p cpstring) cpstring {
     return np.str()
 }
 
-getAuthorFromName(p cpstring) cpstring {
+getAuthorFromName(p str) str {
     i=len(p)-1; for i >= 0 {
         if p[i] == '/' {
             break
         }
-        i = i - 1
+        i--
     }
     np = string(p)
     np.trimRight(len(p) - i)
@@ -46,7 +46,7 @@ getVer() float {
 
 }
 
-getGitURL() cpstring {
+getGitURL() str {
     cmd = command("git config --get remote.origin.url")
     r = cmd.runBytes()
     if cmd.status != 0 || len(r) == 0 {
@@ -77,7 +77,7 @@ wrapPackage() {
     fs.close()
 }
 
-findUrl(sources []cpstring, name cpstring) cpstring {
+findUrl(sources []str, name str) str {
 
     i=0; for i < len(sources) {
         url = sources[i]+"/"+name
@@ -86,7 +86,7 @@ findUrl(sources []cpstring, name cpstring) cpstring {
         if cmd.status == 0 {
             return url
         }
-        i = i + 1
+        i++
     }
 
     panic("Cannot find package '"+name+"'.\nPlease check '"+BPM_DIR+"/sources.json'.")
@@ -94,7 +94,7 @@ findUrl(sources []cpstring, name cpstring) cpstring {
 
 }
 
-isInstalled(name cpstring) bool {
+isInstalled(name str) bool {
     installed = false
     DB = db{}
     DB.open(BPM_DIR + "/db.db")
@@ -109,9 +109,9 @@ isInstalled(name cpstring) bool {
     return installed
 }
 
-#define installPackage(name cpstring)
+#define installPackage(name str)
 
-installPackageFromURL(url cpstring) {
+installPackageFromURL(url str) {
     sources = readSources()
     name = getNameFromURL(url)
     src = string(url)
@@ -122,7 +122,7 @@ installPackageFromURL(url cpstring) {
             found = false
             break
         }
-        i = i + 1
+        i++
     }
 
     if found == false {
@@ -156,26 +156,26 @@ registerPackage(p package*) {
     println("Checking dependecies...")
     i=0; for i < len(p.deps) {
         if p.deps[i] == "" {
-            i = i + 1
+            i++
             continue
         }
         installPackage(p.deps[i])
         resp = DB.exec("INSERT INTO deps (parent, pkg) VALUES('"+p.name+"', '"+p.deps[i]+"')")
         resp.panic()
-        i = i + 1
+        i++
     }
 
     DB.close()
 
 }
 
-removePackageFiles(name cpstring) {
+removePackageFiles(name str) {
     setCurrentPath(BAH_DIR)
     cmd = command("yes | rm -r "+name)
     cmd.runBytes()
 }
 
-installPackage(name cpstring) {
+installPackage(name str) {
     sources = readSources()
 
     url = findUrl(sources, name)
@@ -229,15 +229,15 @@ installPackage(name cpstring) {
 
 }
 
-#define removePackage(name cpstring)
+#define removePackage(name str)
 
-removeDpendency(name cpstring) {
+removeDpendency(name str) {
     DB = db{}
     DB.open(BPM_DIR+"/db.db")
 
     resp = DB.exec("SELECT COUNT(*) FROM deps WHERE pkg = '"+name+"'")
     nb = 0
-    resp.scan(nb)
+    resp.scan(&nb)
 
     if nb == 0 {
         removePackage(name)
@@ -247,7 +247,7 @@ removeDpendency(name cpstring) {
 }
 
 
-removePackage(name cpstring) {
+removePackage(name str) {
     if isInstalled(name) == false {
         panic("No package called '"+name+"' is installed.")
     }
@@ -263,11 +263,11 @@ removePackage(name cpstring) {
 
     println("Removing dependencies.")
     resp = DB.exec("SELECT parent FROM deps WHERE pkg = '"+name+"'")
-    deps = []cpstring
-    resp.scan(deps)
+    deps = []str
+    resp.scan(&deps)
     i=0; for i < len(deps) {
         removeDpendency(deps[i])
-        i = i + 1
+        i++
     }
 
     DB.close()

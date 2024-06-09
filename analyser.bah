@@ -1,9 +1,9 @@
-doneFiles = []cpstring
+doneFiles = []str
 
-#define analyserParseFile(tp ptr, name cpstring)
-#define isInstalled(name cpstring) bool
+#define analyserParseFile(tp ptr, name str)
+#define isInstalled(name str) bool
 
-dirFromFile(f cpstring) cpstring {
+dirFromFile(f str) str {
     i=strlen(f)-1; for i >= 0, i-- {
         if f[i] == '/' {
             break
@@ -24,11 +24,11 @@ dirFromFile(f cpstring) cpstring {
 
 struct analyser {
     p: package*
-    path: cpstring
-    entryPoint: cpstring
-    filesDone: []cpstring
+    path: str
+    entryPoint: str
+    filesDone: []str
 
-    checkPackageImport(fileName cpstring) {
+    checkPackageImport(fileName str) {
         if string(fileName).count("/") == 0 {
             return
         }
@@ -67,17 +67,17 @@ struct analyser {
             
             if t.type == TOKEN_TYPE_ENCL {
                 if t.cont == "(" {
-                    nbEncl =nbEncl + 1
+                    nbEncl++
                 } else if t.cont == ")" {
-                    nbEncl =nbEncl - 1
+                    nbEncl--
                 } else if t.cont == "{" {
-                    nbEncl =nbEncl + 1
+                    nbEncl++
                 } else if t.cont == "}" {
-                    nbEncl =nbEncl - 1
+                    nbEncl--
                 } else if t.cont == "[" {
-                    nbEncl =nbEncl + 1
+                    nbEncl++
                 } else if t.cont == "]" {
-                    nbEncl =nbEncl - 1
+                    nbEncl--
                 }
             }
 
@@ -124,7 +124,7 @@ struct analyser {
 
     }
 
-    fromPackage(p package*, path cpstring) {
+    fromPackage(p package*, path str) {
         this.p = p
         this.path = path
         files = listFiles(path)
@@ -147,7 +147,7 @@ struct analyser {
 
 }
 
-analyserParseFile(tp ptr, name cpstring) {
+analyserParseFile(tp ptr, name str) {
     this analyser* = tp
     if name in this.filesDone {
         return
