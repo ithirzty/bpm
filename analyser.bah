@@ -4,7 +4,7 @@ doneFiles = []str
 #define isInstalled(name str) bool
 
 dirFromFile(f str) str {
-    i=strlen(f)-1; for i >= 0, i-- {
+    i=<int>len(f)-1; for i >= 0, i-- {
         if f[i] == '/' {
             break
         }
@@ -35,20 +35,24 @@ struct analyser {
         path = dirFromFile(fileName)
         if isInstalled(path) {
             if path in this.p.deps == false {
+                println("Found dependency: "+path)
                 this.p.deps[len(this.p.deps)] = path
             }
+        } else {
+            println("Warning: found possible dependency: "+path+" but the package has not been installed through BPM.")
+            println("Use 'bpm -install "+path+"' or add it to 'bpm.mod'.")
         }
     }
 
     parseLine(l []Tok) {
         if l[0].cont == "#include" {
-            fileName = l[1].cont[1:strlen(l[1].cont)-1]
+            fileName = l[1].cont[1:len(l[1].cont)-1]
             if fileExists(this.path + "/" + fileName) {
                 analyserParseFile(this, this.path + "/" + fileName)
             }
             this.checkPackageImport(fileName)
         } else if l[0].cont == "#import" {
-            fileName = l[1].cont[1:strlen(l[1].cont)-1]
+            fileName = l[1].cont[1:len(l[1].cont)-1]
             this.checkPackageImport(fileName)
         }
     }
@@ -136,7 +140,7 @@ struct analyser {
                 if string(files[i]).hasSuffix(".bah") == false {
                     continue
                 }
-                if pathS.hasSuffix(files[i][:strlen(files[i])-4]) {
+                if pathS.hasSuffix(files[i][:len(files[i])-4]) {
                     this.entryPoint = files[i]
                     break
                 }
@@ -158,7 +162,10 @@ analyserParseFile(tp ptr, name str) {
 
     fs = fileStream{}
     fs.open(name, "r")
-    toks = lexer(fs.readContent(), fs.getSize())
+    if fs.isValid() == false {
+        fs.open("main.bah", "r")    
+    }
+    toks = lexer(fs.readContent())
     fs.close()
     this.parseLines(toks)
 }

@@ -16,31 +16,32 @@
     const BAH_DIR = "C:/Bah"
 }
 
+flags flags
+sources = []str
+
 #include "db.bah"
 #include "lexer.bah"
 #include "analyser.bah"
 #include "package.bah"
 
-flags flags
 
 main(args []str) int {
-    DEBUG_RCP = true
     flags = flags{}
     flags.addBool("wrap", "To wrap a package.")
     flags.addBool("list", "To list all packages.")
     flags.addString("install", "To install a package.")
-    flags.addString("update", "To update a package and its dependencies.")
+    flags.addBool("update", "To update all packages.")
     flags.addString("remove", "To remove a package.")
     flags.addString("deps", "To list all dependecies of a package.")
     flags.parse(args)
-
     
     dbGuard()
+    sources = readSources()
 
     //Wrapping a package.
-    if flags.isSet("wrap") == 1 {
+    if flags.isSet("wrap") {
         wrapPackage()
-    } else if flags.isSet("install") == 1 {
+    } else if flags.isSet("install") {
         arg = flags.get("install")
         if arg == "itself" {
             
@@ -72,9 +73,9 @@ main(args []str) int {
         } else {
             installPackage(arg)
         }
-    } else if flags.isSet("remove") == 1 {
+    } else if flags.isSet("remove") {
         removePackage(flags.get("remove"))
-    } else if flags.isSet("list") == 1 {
+    } else if flags.isSet("list") {
         DB = db{}
         DB.open(BPM_DIR+"/db.db")
         resp = DB.exec("SELECT * FROM packages")
@@ -86,7 +87,7 @@ main(args []str) int {
             i++
         }
         DB.close()
-    } else if flags.isSet("deps") == 1 {
+    } else if flags.isSet("deps") {
         name = flags.get("deps")
         if isInstalled(name) == false {
             panic("No package called '"+name+"' is installed.")
@@ -104,9 +105,19 @@ main(args []str) int {
             i++
         }
         DB.close()
+    } else if flags.isSet("update") {
+        DB = db{}
+        DB.open(BPM_DIR+"/db.db")
+        resp = DB.exec("SELECT * FROM packages")
+        packages = []package*
+        resp.scan(packages)
+        DB.close()
+        i=0; for i < len(packages), i++ {
+            updatePackage(packages[i])
+        }
     }
 
-    println("Done!")
+    println("Bye!")
 
     return 0
 }

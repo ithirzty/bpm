@@ -1,6 +1,9 @@
+#define removePackage(name str)
+#define removeDpendency(name str)
+
 getNameFromURL(p str) str {
     nbSlash = 0
-    i=len(p)-1; for i >= 0 {
+    i=<int>len(p)-1; for i >= 0 {
         if p[i] == '/' {
             nbSlash++
         }
@@ -19,7 +22,7 @@ getNameFromURL(p str) str {
 }
 
 getAuthorFromName(p str) str {
-    i=len(p)-1; for i >= 0 {
+    i=<int>len(p)-1; for i >= 0 {
         if p[i] == '/' {
             break
         }
@@ -75,6 +78,7 @@ wrapPackage() {
     fs.open("./bpm.mod", "w")
     fs.writeFile(toJson(p))
     fs.close()
+    println("Done!")
 }
 
 findUrl(sources []str, name str) str {
@@ -112,10 +116,9 @@ isInstalled(name str) bool {
 #define installPackage(name str)
 
 installPackageFromURL(url str) {
-    sources = readSources()
     name = getNameFromURL(url)
     src = string(url)
-    src.trimRight(strlen(name)+1)
+    src.trimRight(len(name)+1)
     found = false
     i=0; for i < len(sources) {
         if sources[i] == src.str() {
@@ -126,18 +129,21 @@ installPackageFromURL(url str) {
     }
 
     if found == false {
-        println("Package '"+name+"' comes from the source '"+src.str()+"'. Should you add it? [Y/n] ")
-        resp = stdinput()
-        if resp == "Y" {
-            print("Adding '"+src.str()+"'...")
-            sources[len(sources)] = src.str()
-            fs = fileStream{}
-            fs.open(BPM_DIR + "/sources.json", "w")
-            fs.writeFile(toJson(sources))
-            fs.close()
-            println("ok")
-        } else {
-            return
+        resp = ""
+        for resp != "Y" && resp != "n" {
+            print("Package '"+name+"' comes from the source '"+src.str()+"'. Should you add it? [Y/n] ")
+            resp = stdinput()
+            if resp == "Y" {
+                print("Adding '"+src.str()+"'...")
+                sources[len(sources)] = src.str()
+                fs = fileStream{}
+                fs.open(BPM_DIR + "/sources.json", "w")
+                fs.writeFile(toJson(sources))
+                fs.close()
+                println("ok")
+            } else if resp == "n" {
+                return
+            }
         }
     }
     installPackage(name)
@@ -154,15 +160,13 @@ registerPackage(p package*) {
     println("ok")
 
     println("Checking dependecies...")
-    i=0; for i < len(p.deps) {
+    i=0; for i < len(p.deps), i++ {
         if p.deps[i] == "" {
-            i++
             continue
         }
         installPackage(p.deps[i])
         resp = DB.exec("INSERT INTO deps (parent, pkg) VALUES('"+p.name+"', '"+p.deps[i]+"')")
         resp.panic()
-        i++
     }
 
     DB.close()
@@ -175,61 +179,115 @@ removePackageFiles(name str) {
     cmd.runBytes()
 }
 
-installPackage(name str) {
-    sources = readSources()
+updatePackage(p package*) {
+    println("Updating '"+p.name+"'.")
+    setCurrentPath(BAH_DIR+"/"+p.name)
+    cmd = command("git pull origin main")
+    cmd.runBytes()
 
+    if cmd.status != 0 {
+        println("Error updating...")
+        println("There might be changes inside the local version of the package that might be discarded if updated.")
+        resp = ""
+        for resp != "Y" && resp != "n" {
+            print("Do you want to force the pachage's update? [Y/n]")
+            resp = stdinput()
+            if resp == "Y" {
+                cmd = command("git reset --hard origin")
+                cmd.runBytes()
+
+                if cmd.status != 0 {
+                    println("Could not force package update. Try resinstalling it.")
+                    return
+                }
+            } else if resp == "n" {
+                return
+            }
+        }
+    }
+
+    fs = fileStream{}
+    fs.open("./bpm.mod", "r")
+    root = parseJson(fs.readContent())
+    fs.close()
+
+    nDeps = []str
+    root.get("deps").scan(nDeps)
+
+    DB = db{}
+    DB.open(BPM_DIR + "/db.db")
+    println("Checking dependecies...")
+
+    i=0; for i < len(nDeps), i++ {
+        if nDeps[i] == "" {
+            continue
+        }
+        installPackage(nDeps[i])
+        if nDeps[i] in p.deps == false {
+            resp = DB.exec("INSERT INTO deps (parent, pkg) VALUES('"+p.name+"', '"+nDeps[i]+"')")
+            resp.panic()
+        }
+    }
+    DB.close()
+
+    i=0; for i < len(p.deps), i++ {
+        if p.deps[i] in nDeps == false {
+            removeDpendency(p.deps[i])
+        }
+    }
+
+    println("Done updating '"+p.name+"'.\n")
+}
+
+installPackage(name str) {
     url = findUrl(sources, name)
 
     dir = getAuthorFromName(name)
     setCurrentPath(BAH_DIR)
 
-    if isInstalled(name) == false {
-        println("Installing '"+name+"'.")
-        mkdir(dir, 0700)
-        setCurrentPath(dir)
-
-        print("Clonning repository... ")
-
-        cmd = command("git clone "+url+"")
-        cmd.runBytes()
-
-        setCurrentPath("../"+name)
-
-        files = listFiles(".")
-
-        println("ok")
-
-        if "bpm.mod" in files == false {
-            removePackageFiles(name)
-            panic("No BPM package found. Aborting.")
-        }
-
+    if isInstalled(name) {
+        DB = db{}
+        DB.open(BPM_DIR + "/db.db")
+        resp = DB.exec("SELECT * FROM packages WHERE name = '"+name+"'")
         p = new package
-        fs = fileStream{}
-        fs.open("./bpm.mod", "r")
-        root = parseJson(fs.readContent())
-        fs.close()
-        root.scan(p)
-        if p.url != url {
-            println("WARNING: URL missmatch, this package could be stolen or compromised.")
-        }
+        resp.scan(p)
+        DB.close()
+        updatePackage(p)
+        return
+    }
+    println("Installing '"+name+"'.")
+    mkdir(dir, 0700)
+    setCurrentPath(dir)
 
-        registerPackage(p)
-    } else {
-        println("Updating '"+name+"'.")
-        setCurrentPath(name)
-        cmd = command("git pull origin main")
-        cmd.runBytes()
+    print("Clonning repository... ")
 
-        if cmd.status != 0 {
-            println("Error updating...")
-        }
-        //update package
+    cmd = command("git clone "+url+"")
+    cmd.runBytes()
+
+    setCurrentPath("../"+name)
+
+    files = listFiles(".")
+
+    println("ok")
+
+    if "bpm.mod" in files == false {
+        removePackageFiles(name)
+        panic("No BPM package found. Aborting.")
     }
 
-}
+    p = new package
+    fs = fileStream{}
+    fs.open("./bpm.mod", "r")
+    root = parseJson(fs.readContent())
+    fs.close()
+    root.scan(p)
+    if p.url != url {
+        println("WARNING: URL missmatch, this package could be stolen or compromised.")
+    }
 
-#define removePackage(name str)
+    registerPackage(p)
+
+}
 
 removeDpendency(name str) {
     DB = db{}

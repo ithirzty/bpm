@@ -53,17 +53,17 @@ readSources() []str {
     if fs.isValid() == 0 {
         panic("Cannot read sources file, please make shure it exists and have the right permissions.")
     }
-    sources = []str
+    srces = []str
     root = parseJson(fs.readContent())
-    root.scan(sources)
+    root.scan(srces)
 
-    if len(sources) == 0 {
+    if len(srces) == 0 {
         panic("no sources found!\nAdd a source in '"+BPM_DIR+"/sources.json'")
     }
 
     println("ok")
     fs.close()
-    return sources
+    return srces
 }
 
 struct package {
