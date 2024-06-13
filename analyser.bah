@@ -29,9 +29,13 @@ struct analyser {
     filesDone: []str
 
     checkPackageImport(fileName str) {
-        if string(fileName).count("/") == 0 {
+        if (fileName[0] == '<' && fileName[len(fileName)-1] == '>') || strHasSuffix(fileName, ".h") || strHasSuffix(fileName, ".c") {
             return
         }
+        if string(fileName).count("/") == 0 || strHasPrefix(fileName, "./") {
+            return
+        }
+
         path = dirFromFile(fileName)
         if isInstalled(path) {
             if path in this.p.deps == false {
