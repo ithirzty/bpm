@@ -1,16 +1,17 @@
 BPM_DIR = ""
-
 DB db
+
+#define getenv(name char*) char*
 
 genBPMdir() {
     #linux {
-        BPM_DIR = getenv("HOME") + "/.bpm"
+        BPM_DIR = cStrToBah(getenv("HOME")) + "/.bpm"
     }
     #windows {
-        BPM_DIR = getenv("HOMEPATH") + "/.bpm"
+        BPM_DIR = cStrToBah(getenv("HOMEPATH")) + "/.bpm"
     }
     #darwin {
-        BPM_DIR = getenv("HOME") + "/.bpm"
+        BPM_DIR = cStrToBah(getenv("HOME")) + "/.bpm"
     }
     mkdir(BPM_DIR, 0700)
 }
