@@ -13,12 +13,12 @@ genBPMdir() {
     #darwin {
         BPM_DIR = cStrToBah(getenv("HOME")) + "/.bpm"
     }
-    mkdir(BPM_DIR, 0700)
+    makeDir(BPM_DIR, 0700)
 }
 
 dbGuard() {
     genBPMdir()
-    if fileExists(BPM_DIR + "/db.db") == 0 {
+    if fileExists(BPM_DIR + "/db.db") == false {
         DB = db{}
         if DB.open(BPM_DIR + "/db.db") == false {
             panic("Errror creating BPM database.")
@@ -32,6 +32,11 @@ dbGuard() {
 
         DB.exec("CREATE TABLE deps(
             pkg TEXT PRIMARY KEY NOT NULL,
+            parent TEXT NOT NULL
+        )")
+
+        DB.exec("CREATE TABLE syslibs(
+            path TEXT PRIMARY KEY NOT NULL,
             parent TEXT NOT NULL
         )")
 
@@ -72,6 +77,8 @@ struct package {
     url: str
     ver: float
     deps: []str
+    syslibs: []str
+    bpmver: float
 }
 
 struct dep {

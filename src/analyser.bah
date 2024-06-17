@@ -1,3 +1,15 @@
+const SYS_LIBS_FOLDER = "/libs"
+
+supportedPlatforms = []str {
+    "linux",
+    "darwin",
+    "windows"
+}
+
+supportedExtensions = []str {
+    ".so", ".dll", ".a"
+}
+
 doneFiles = []str
 
 #define analyserParseFile(tp ptr, name str)
@@ -132,7 +144,21 @@ struct analyser {
 
     }
 
+    scanSysLibs(platform str) {
+        files = listFiles(this.path + SYS_LIBS_FOLDER + "/" + platform)
+        i=0; for i < len(files), i++ {
+            supported = false
+            j=0; for j < len(supportedExtensions), j++ {
+                if strCount(files[i], supportedExtensions[j]) > 0 {
+                    println("Found system library: "+files[i])
+                    this.p.syslibs[len(this.p.syslibs)] = SYS_LIBS_FOLDER[1:]+"/"+platform+"/"+files[i]
+                }
+            }
+        }
+    }
+
     fromPackage(p package*, path str) {
+        //Finding bah (BPM) dependencies by looking for #import and #include
         this.p = p
         this.path = path
         files = listFiles(path)
@@ -151,6 +177,17 @@ struct analyser {
             }
         }
         analyserParseFile(this, path+"/"+this.entryPoint)
+
+        //Finding system libraries
+        if isFolder(path + SYS_LIBS_FOLDER) {
+            i=0; for i < len(supportedPlatforms), i++ {
+                folderPath = path + SYS_LIBS_FOLDER + "/" + supportedPlatforms[i]
+                if isFolder(folderPath) {
+                    this.scanSysLibs(supportedPlatforms[i])
+                }
+            }
+        }
+
     }
 
 }

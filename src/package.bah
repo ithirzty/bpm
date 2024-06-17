@@ -1,5 +1,6 @@
 #define removePackage(name str)
 #define removeDpendency(name str)
+#define removeSysLibs(path str) 
 
 getNameFromURL(p str) str {
     nbSlash = 0
@@ -36,24 +37,28 @@ getAuthorFromName(p str) str {
 
 getVer() float {
     cmd = command("bah -v")
-    ver = string(arrToStr(cmd.runBytes()))
-    ver.trimLeft(23)
-    ver.trimRight(24)
+    ver = arrToStr(cmd.runBytes())
 
-    parts = splitString(ver, " (build ")
+    ver = ver[23:len(ver)-22]
 
-    ver = parts[0]
-    build = parts[1]
+    version = splitStringBefore(string(ver), " ")
+    build = ver
+    i=<int>len(ver)-1; for i >= 0, i-- {
+        if isNumber(ver[i]) == false {
+            build = build[i+1:]
+            break
+        }
+    }
 
-    return strToFloat(ver.str() + build.str())
-
+    return strToFloat(version+build)
 }
 
 getGitURL() str {
     cmd = command("git config --get remote.origin.url")
     r = cmd.runBytes()
     if cmd.status != 0 || len(r) == 0 {
-        panic("Cannot wrap package that is not in a git repository.\nMake sure that you add the remote origin before wrapping the package.")
+        println("Cannot wrap package that is not in a git repository.\nMake sure that you add the remote origin before wrapping the package.")
+        return ""
     }
     s = string(arrToStr(r))
     s.trimRight(1)
@@ -67,6 +72,13 @@ wrapPackage() {
     //initiating a new package
     p = new package
     p.url = getGitURL()
+
+    if len(p.url) == 0 {
+        return
+    }
+
+    p.bpmver = BPM_VERSION
+
     p.name = getNameFromURL(p.url)
     p.ver = getVer()
     
@@ -93,7 +105,7 @@ findUrl(sources []str, name str) str {
         i++
     }
 
-    panic("Cannot find package '"+name+"'.\nPlease check '"+BPM_DIR+"/sources.json'.")
+    println("Cannot find package '"+name+"'.\nPlease check '"+BPM_DIR+"/sources.json'.")
     return ""
 
 }
@@ -148,6 +160,50 @@ installPackageFromURL(url str) {
     }
     installPackage(name)
 }
+
+copyFile(file str, dir str) bool {
+    println("Copying file: "+file+" to "+dir)
+
+    s = "cp \""+file+"\" \""+dir+"\""
+
+    #windows {
+        s = "xcopy /S /Q /Y /F \""+file+"\" \""+dir+"\""
+    }
+
+    cmd = command(s)
+
+    cmd.runBytes()
+    #linux {
+        if cmd.status != 0 {
+            cmd = command("sudo " + s)
+            cmd.runBytes()
+        }
+    }
+
+    return cmd.status == 0
+}
+
+deleteFile(file str) bool {
+    println("Deleting file: "+file)
+    #windows {
+        return removeFile(file)
+    }
+
+    s = "yes | rm \""+file+"\""
+
+    cmd = command(s)
+
+    cmd.runBytes()
+    #linux {
+        if cmd.status != 0 {
+            cmd = command("sudo rm \""+file+"\"")
+            res = cmd.runBytes()
+        }
+    }
+
+    return cmd.status == 0
+}
+
 registerPackage(p package*) {
     print("Updating database... ")
 
@@ -166,6 +222,16 @@ registerPackage(p package*) {
         }
         installPackage(p.deps[i])
         resp = DB.exec("INSERT INTO deps (parent, pkg) VALUES('"+p.name+"', '"+p.deps[i]+"')")
+        resp.panic()
+    }
+
+    println("Checking system libraries...")
+    i=0; for i < len(p.syslibs), i++ {
+        if p.syslibs[i] == "" {
+            continue
+        }
+        copyFile(BAH_DIR+"/"+p.name+"/"+p.syslibs[i], BAH_DIR + "/" + dirFromFile(p.syslibs[i]))
+        resp = DB.exec("INSERT INTO syslibs (parent, path) VALUES('"+p.name+"', '"+p.syslibs[i]+"')")
         resp.panic()
     }
 
@@ -210,14 +276,44 @@ updatePackage(p package*) {
     fs.open("./bpm.mod", "r")
     root = parseJson(fs.readContent())
     fs.close()
+    np = new package
+    root.scan(np)
+
+    if np.bpmver > BPM_VERSION {
+        println("ERROR: This package was wrapped with a newer version of BPM. Please update BPM before proceeding.")
+        return
+    }
+
+    if np.ver > getVer() {
+        println("Warning: This package was wrapped with a newer version of the Bah compiler.")
+    }
 
     nDeps = []str
-    root.get("deps").scan(nDeps)
+    nSysLibs = []str
+
+    let depsJson = root.get("deps") then {
+        depsJson.scan(nDeps)
+    }
+    
+    let sysLibsJson = root.get("syslibs") then {
+        sysLibsJson.scan(nSysLibs)
+    }
 
     DB = db{}
     DB.open(BPM_DIR + "/db.db")
-    println("Checking dependecies...")
+    
+    println("Checking system libraries...")
 
+    i=0; for i < len(nSysLibs), i++ {
+        if nSysLibs[i] == "" || nSysLibs[i] in p.syslibs {
+            continue
+        }
+        copyFile("./"+nSysLibs[i], BAH_DIR + "/" + dirFromFile(nSysLibs[i]))
+        resp = DB.exec("INSERT INTO syslibs (parent, path) VALUES('"+p.name+"', '"+nSysLibs[i]+"')")
+        resp.panic()
+    }
+
+    println("Checking dependecies...")
     i=0; for i < len(nDeps), i++ {
         if nDeps[i] == "" {
             continue
@@ -228,10 +324,21 @@ updatePackage(p package*) {
             resp.panic()
         }
     }
+
+    i=0; for i < len(p.syslibs), i++ {
+        if p.syslibs[i] in nSysLibs == false {
+            resp = DB.exec("DELETE FROM syslibs WHERE parent='"+p.name+"' AND path='"+p.syslibs[i]+"'")
+            resp.panic()
+            removeSysLibs(p.syslibs[i])
+        }
+    }
+
     DB.close()
 
     i=0; for i < len(p.deps), i++ {
         if p.deps[i] in nDeps == false {
+            resp = DB.exec("DELETE FROM deps WHERE parent='"+p.name+"' AND pkg='"+p.deps[i]+"'")
+            resp.panic()
             removeDpendency(p.deps[i])
         }
     }
@@ -242,6 +349,10 @@ updatePackage(p package*) {
 installPackage(name str) {
     url = findUrl(sources, name)
 
+    if len(url) == 0 {
+        return
+    }
+
     dir = getAuthorFromName(name)
     setCurrentPath(BAH_DIR)
 
@@ -249,8 +360,18 @@ installPackage(name str) {
         DB = db{}
         DB.open(BPM_DIR + "/db.db")
         resp = DB.exec("SELECT * FROM packages WHERE name = '"+name+"'")
+        resp.panic()
         p = new package
         resp.scan(p)
+
+        resp = DB.exec("SELECT pkg FROM deps WHERE parent = '"+name+"'")
+        resp.panic()
+        resp.scan(p.deps)
+
+        resp = DB.exec("SELECT path FROM syslibs WHERE parent = '"+name+"'")
+        resp.panic()
+        resp.scan(p.syslibs)
+
         DB.close()
         updatePackage(p)
         return
@@ -272,7 +393,8 @@ installPackage(name str) {
 
     if "bpm.mod" in files == false {
         removePackageFiles(name)
-        panic("No BPM package found. Aborting.")
+        println("No BPM package found. Aborting.")
+        return
     }
 
     p = new package
@@ -283,6 +405,21 @@ installPackage(name str) {
     root.scan(p)
     if p.url != url {
         println("WARNING: URL missmatch, this package could be stolen or compromised.")
+    }
+
+    if p.bpmver > BPM_VERSION {
+        println("ERROR: This package was wrapped with a newer version of BPM. Please update BPM before proceeding.")
+        return
+    }
+
+    if p.ver > getVer() {
+        println("Warning: This package was wrapped with a newer version of the Bah compiler.")
+    }
+
+    i=0; for i < len(p.syslibs), i++ {
+        if strHasPrefix(p.syslibs[i], SYS_LIBS_FOLDER[1:]) == false {
+            println("Ignoring system library: "+p.syslibs[i])
+        }
     }
 
     registerPackage(p)
@@ -304,12 +441,27 @@ removeDpendency(name str) {
     DB.close()
 }
 
+removeSysLibs(path str) {
+    DB = db{}
+    DB.open(BPM_DIR+"/db.db")
+
+    resp = DB.exec("SELECT COUNT(*) FROM syslibs WHERE path = '"+path+"'")
+    nb = 0
+    resp.scan(&nb)
+
+    if nb == 0 {
+        deleteFile(BAH_DIR+"/"+path)
+    }
+
+    DB.close()
+}
+
 
 removePackage(name str) {
     if isInstalled(name) == false {
-        panic("No package called '"+name+"' is installed.")
+        println("No package called '"+name+"' is installed.")
+        return
     }
-
 
     DB = db{}
     DB.open(BPM_DIR+"/db.db")
@@ -319,13 +471,26 @@ removePackage(name str) {
     removePackageFiles(name)
     println("ok")
 
-    println("Removing dependencies.")
-    resp = DB.exec("SELECT parent FROM deps WHERE pkg = '"+name+"'")
+
+    resp = DB.exec("SELECT pkg FROM deps WHERE parent = '"+name+"'")
     deps = []str
-    resp.scan(&deps)
+    resp.scan(deps)
+    println("Removing dependencies. (found: "+uintToStr(len(deps))+")")
+    DB.exec("DELETE FROM deps WHERE parent = '"+name+"'")
     i=0; for i < len(deps) {
         removeDpendency(deps[i])
         i++
+    }
+
+    resp = DB.exec("SELECT path FROM syslibs WHERE parent = '"+name+"'")
+    syslibs = []str
+    resp.scan(syslibs)
+    println("Removing system libraries. (found: "+uintToStr(len(syslibs))+")")
+    DB.exec("DELETE FROM syslibs WHERE parent = '"+name+"'")
+    i=0; for i < len(syslibs), i++ {
+        resp = DB.exec("DELETE FROM syslibs WHERE parent='"+name+"' AND path='"+syslibs[i]+"'")
+        resp.panic()
+        removeSysLibs(syslibs[i])
     }
 
     DB.close()

@@ -1,0 +1,24 @@
+
+//When installing a new version of BPM, this will be called to be sure that the database has
+//the right layout.
+applyPatches() {
+    DB = db{}
+
+    if DB.open(BPM_DIR + "/db.db") == false {
+        panic("Errror applying database patches.")
+    }
+
+    resp = DB.exec("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='syslibs'")
+    res = 0
+    resp.scan(&res)
+
+    if res == 0 {
+        resp = DB.exec("CREATE TABLE syslibs (
+            path TEXT PRIMARY KEY NOT NULL,
+            parent TEXT NOT NULL
+        )")
+        resp.panic()
+    }
+
+    DB.close()
+}

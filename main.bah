@@ -6,6 +6,8 @@
 #import "json.bah"
 #import "path.bah"
 
+const BPM_VERSION = 0.1
+
 #linux {
     const BAH_DIR = "/opt/bah"
 }
@@ -19,10 +21,11 @@
 flags flags
 sources = []str
 
-#include "db.bah"
-#include "lexer.bah"
-#include "analyser.bah"
-#include "package.bah"
+#include "src/db.bah"
+#include "src/lexer.bah"
+#include "src/analyser.bah"
+#include "src/package.bah"
+#include "src/patches.bah"
 
 
 main(args []str) int {
@@ -49,10 +52,10 @@ main(args []str) int {
             name = parts[0]
 
             #linux {
-                cmd = command("cp "+name.str()+" /bin/bpm & chmod +x /bin/bpm")
+                cmd = command("sudo cp "+name.str()+" /bin/bpm & chmod +x /bin/bpm")
                 cmd.runBytes()
                 if fileExists("/bin/bpm") == false {
-                    panic("Please run as sudo.")
+                    println("Could not add to path.")
                 }
             }
             #darwin {
@@ -61,7 +64,7 @@ main(args []str) int {
                 cmd = command("export PATH=\""+BPM_DIR+":$PATH\"")
                 cmd.runBytes()
                 if cmd.status != 0 {
-                    panic("Please run as sudo.")
+                    println("Could not add to path.")
                 }
             }
             #windows {
@@ -70,6 +73,8 @@ main(args []str) int {
                 cmd = command("xcopy /S /Q /Y /F "+name.str()+" C:/WINDOWS/bpm.exe")
                 cmd.runBytes()
             }
+
+            applyPatches()
         } else {
             installPackage(arg)
         }
@@ -90,7 +95,8 @@ main(args []str) int {
     } else if flags.isSet("deps") {
         name = flags.get("deps")
         if isInstalled(name) == false {
-            panic("No package called '"+name+"' is installed.")
+            println("No package called '"+name+"' is installed.")
+            return 1
         }
         DB = db{}
         DB.open(BPM_DIR+"/db.db")
